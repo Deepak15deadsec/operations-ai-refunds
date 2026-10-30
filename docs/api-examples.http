@@ -1,0 +1,50 @@
+# Example requests (VS Code REST Client / JetBrains HTTP client).
+# Get a token first:  make token USER_NAME=supervisor PASS=supervisor-demo
+@api = http://localhost:8000
+@token = paste-access-token-here
+
+### Ticket detail
+GET {{api}}/api/v1/tickets/T-101
+Authorization: Bearer {{token}}
+
+### Start a one-ticket investigation
+POST {{api}}/api/v1/runs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"mode": "ticket", "ticket_number": "T-101", "instruction": "Investigate delivery delay and prepare a refund and customer reply if justified."}
+
+### Start a batch (max 10)
+POST {{api}}/api/v1/runs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"mode": "batch", "instruction": "Review delayed deliveries and prepare resolutions.", "filters": {"priority": "high", "status": "open"}, "limit": 10}
+
+### Run status, findings and proposals
+GET {{api}}/api/v1/runs/{{run_id}}
+Authorization: Bearer {{token}}
+
+### Event stream (SSE). Add Last-Event-ID to resume after a given event.
+GET {{api}}/api/v1/runs/{{run_id}}/events
+Authorization: Bearer {{token}}
+Last-Event-ID: 0
+
+### Pending approvals (supervisor+)
+GET {{api}}/api/v1/approvals?status=pending
+Authorization: Bearer {{token}}
+
+### Approve (repeat it: same 200 response, no second effect)
+POST {{api}}/api/v1/approvals/{{approval_id}}/decision
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"decision": "approve", "note": "Verified the delay and policy"}
+
+### Simulated ledger
+GET {{api}}/api/v1/refunds
+Authorization: Bearer {{token}}
+
+### Audit (admin)
+GET {{api}}/api/v1/audit-events?limit=50
+Authorization: Bearer {{token}}

@@ -1,0 +1,21 @@
+[project]
+name = "operations-mcp"
+version = "0.1.0"
+description = "Internal MCP server exposing tenant-scoped, read-only operations tools"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "operations-backend",
+    "mcp>=2.3,<3",
+    "uvicorn[standard]>=0.32",
+    "pyjwt>=2.10",
+]
+
+[tool.uv.sources]
+operations-backend = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["operations_mcp"]

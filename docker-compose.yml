@@ -1,0 +1,144 @@
+# Operations AI — local demo stack. Everything is simulated: no real payments or messages.
+# Host ports are configurable in .env (defaults match the spec).
+name: operations-ai
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+psycopg://app:${POSTGRES_PASSWORD:-local_only}@postgres:5432/operations
+  MCP_DATABASE_URL: postgresql+psycopg://app_readonly:local_only_ro@postgres:5432/operations
+  LANGGRAPH_DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD:-local_only}@postgres:5432/operations?options=-csearch_path%3Dlanggraph
+  OIDC_ISSUER_URL: http://localhost:${KEYCLOAK_PORT:-8080}/realms/operations-demo
+  OIDC_JWKS_URL: http://keycloak:8080/realms/operations-demo/protocol/openid-connect/certs
+  OIDC_AUDIENCE: operations-api
+  OIDC_TENANT_CLAIM: tenant_id
+  AGENT_MODEL: ${AGENT_MODEL:-demo:heuristic}
+  AGENT_TOOL_TRANSPORT: mcp
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  MCP_INTERNAL_URL: http://mcp-operations:3001/mcp
+  MCP_ALLOWED_HOSTS: mcp-operations:3001
+  MCP_RUN_TOKEN_SECRET: ${MCP_RUN_TOKEN_SECRET:-local-development-only-change-me}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  MAX_BATCH_TICKETS: ${MAX_BATCH_TICKETS:-10}
+  MAX_CONCURRENT_TICKET_RUNS: ${MAX_CONCURRENT_TICKET_RUNS:-2}
+  APPROVAL_TTL_HOURS: ${APPROVAL_TTL_HOURS:-24}
+  CORS_ORIGINS: http://localhost:${WEB_PORT:-3000}
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  image: operations-ai-backend:local
+  environment: *backend-env
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_only}
+      POSTGRES_DB: operations
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d operations"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.2
+    command: ["start-dev", "--import-realm", "--http-port=8080", "--health-enabled=true"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: kcadmin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-local-development-only}
+      # Tokens always carry the browser-facing issuer; containers still reach Keycloak via the backchannel.
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:-8080}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      WEB_ORIGIN: http://localhost:${WEB_PORT:-3000}
+      AUTH_KEYCLOAK_SECRET: ${AUTH_KEYCLOAK_SECRET:-local-development-only-change-me}
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "127.0.0.1:${KEYCLOAK_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  migrate:
+    <<: *backend
+    command: ["python", "-m", "scripts.migrate"]
+    environment:
+      <<: *backend-env
+      SEED_DEMO: ${SEED_DEMO:-true}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mcp-operations:
+    <<: *backend
+    command: ["python", "-m", "operations_mcp.server"]
+    expose: ["3001"]  # internal network only; no host port
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:3001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    <<: *backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.worker.main"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mcp-operations:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_DEMO_BANNER: "Demo environment — all refunds and messages are simulated."
+    image: operations-ai-frontend:local
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      APP_URL: http://localhost:${WEB_PORT:-3000}
+      OIDC_PUBLIC_ISSUER: http://localhost:${KEYCLOAK_PORT:-8080}/realms/operations-demo
+      OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/operations-demo
+      OIDC_CLIENT_ID: operations-web
+      OIDC_CLIENT_SECRET: ${AUTH_KEYCLOAK_SECRET:-local-development-only-change-me}
+      SESSION_SECRET: ${SESSION_SECRET:-local-development-only-session-secret-change-me}
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:

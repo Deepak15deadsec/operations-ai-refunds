@@ -1,0 +1,84 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: local_only
+          POSTGRES_DB: operations_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app -d operations_test" --health-interval 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://app:local_only@localhost:5432/operations_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.6.16"
+      - run: uv python install 3.12
+      - run: uv sync --all-packages --frozen
+      - name: Lint
+        run: uv run ruff check backend mcp_servers evaluations
+      - name: Type check
+        run: uv run mypy backend/app mcp_servers/operations/operations_mcp
+      - name: Unit, integration, security and MCP tests
+        run: uv run pytest
+      - name: Evaluation (offline)
+        run: uv run python evaluations/run_evals.py --output evaluation-report.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-report
+          path: evaluation-report.md
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  compose:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose up --build -d
+      - name: Wait for the stack
+        run: |
+          for i in $(seq 1 90); do
+            curl -fsS http://localhost:3000/login >/dev/null 2>&1 && curl -fsS http://localhost:8000/health/ready >/dev/null && exit 0
+            sleep 5
+          done
+          docker compose ps; exit 1
+      - name: Smoke test with a real Keycloak token
+        run: |
+          TOKEN=$(make -s token USER_NAME=operator PASS=operator-demo)
+          curl -fsS http://localhost:8000/api/v1/tickets/T-101 -H "Authorization: Bearer $TOKEN"
+      - name: Playwright E2E
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          E2E_BASE_URL=http://localhost:3000 npx playwright test
+      - if: failure()
+        run: docker compose logs
