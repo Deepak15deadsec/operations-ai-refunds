@@ -25,6 +25,10 @@ const paths = {
   logout: "M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10",
   chevron: "M9 6l6 6-6 6",
   layers: "M12 3 3 8l9 5 9-5zM3 13l9 5 9-5",
+  chart: "M3 21h18M6 21V11M12 21V5M18 21v-8",
+  gauge: "M12 13l4-4M21 12a9 9 0 1 0-18 0M3 12h2M19 12h2M12 3v2",
+  beaker: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3M7.5 14h9",
+  coin: "M12 8c4.4 0 8-1.1 8-2.5S16.4 3 12 3 4 4.1 4 5.5 7.6 8 12 8zM4 5.5v13C4 20 7.6 21 12 21s8-1 8-2.5v-13M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5",
 } as const;
 
 export type IconName = keyof typeof paths;

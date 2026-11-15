@@ -16,6 +16,7 @@ import json
 import sys
 import time
 import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -423,6 +424,59 @@ def report(results: list[dict], totals: dict[str, int], model_label: str, elapse
     return "\n".join(lines)
 
 
+def report_json(results: list[dict], totals: dict[str, int], model_label: str, elapsed: float) -> dict:
+    """Machine-readable twin of report(), served in-app by GET /api/v1/eval-report."""
+    n = len(results)
+    status_ok = sum(r["checks"]["status"] for r in results)
+    demo = [r for r in results if r["demo"]]
+    demo_correct = sum(r["valid"] == r["expected_valid"] and (r["findings_cited"] or not r["valid"]) for r in demo)
+    tool_ok, tool_err = sum(r["tool_ok"] for r in results), sum(r["tool_err"] for r in results)
+    proposed_valid = [r for r in results if r["valid"]]
+    justified = sum(r["checks"].get("valid_actions", True) for r in proposed_valid)
+    faults = [r for r in results if r["category"] == "fault"]
+    adversarial = [r for r in results if r["category"] == "adversarial"]
+    inv = [r["agent_ms"] for r in results if r["agent_ms"]]
+    exe = [r["execute_ms"] for r in results if r["refunds"] or r["messages"]]
+    cats: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "passed": 0})
+    for r in results:
+        cats[r["category"]]["total"] += 1
+        cats[r["category"]]["passed"] += int(r["passed"])
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "model_label": model_label,
+        "fixture_version": FIXTURE_VERSION,
+        "clock": NOW.isoformat(),
+        "wall_seconds": round(elapsed, 1),
+        "scenarios_total": n,
+        "scenarios_passed": sum(r["passed"] for r in results),
+        "metrics": {
+            "task_completion": {"passed": status_ok, "total": n},
+            "investigation_correctness": {"passed": demo_correct, "total": len(demo)},
+            "tool_validity": {"ok": tool_ok, "total": tool_ok + tool_err},
+            "cross_tenant_leaks": sum(r["cross_tenant"] for r in results),
+            "executable_precision": {"passed": justified, "total": len(proposed_valid)},
+            "adversarial_contained": {"passed": sum(r["passed"] for r in adversarial), "total": len(adversarial)},
+            "policy_violations": totals["policy_violations"],
+            "unapproved_writes": totals["unapproved_writes"],
+            "duplicate_writes": totals["duplicate_writes"],
+            "recovery": {"passed": sum(r["passed"] for r in faults), "total": len(faults)},
+            "latency_investigation_ms": {"p50": round(pct(inv, 0.5)), "p95": round(pct(inv, 0.95))},
+            "latency_execution_ms": {"p50": round(pct(exe, 0.5)), "p95": round(pct(exe, 0.95))},
+            "tokens": sum(r["tokens"] for r in results),
+        },
+        "categories": {k: dict(v) for k, v in sorted(cats.items())},
+        "scenarios": [
+            {
+                "id": r["id"], "title": r["title"], "category": r["category"], "status": r["status"],
+                "passed": r["passed"], "valid": r["valid"], "invalid": r["invalid"], "blocked": r["blocked"],
+                "refunds": r["refunds"], "messages": r["messages"],
+                "failed_checks": [k for k, ok in r["checks"].items() if not ok],
+            }
+            for r in results
+        ],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--live-model", help="Use this real model (e.g. openai:gpt-4.1-mini) for 'demo' scenarios")
@@ -454,9 +508,13 @@ def main() -> int:
         set_clock(None)
 
     label = args.live_model or "offline: demo:heuristic + scripted adversarial outputs (no LLM provider)"
-    Path(args.output).write_text(report(results, totals, label, time.perf_counter() - started))
+    elapsed = time.perf_counter() - started
+    Path(args.output).write_text(report(results, totals, label, elapsed))
+    json_path = Path(args.output).with_suffix(".json")
+    json_path.write_text(json.dumps(report_json(results, totals, label, elapsed), indent=2))
     passed = sum(r["passed"] for r in results)
-    print(f"\n{passed}/{len(results)} scenarios passed; invariants {totals}; report -> {args.output}")
+    print(f"\n{passed}/{len(results)} scenarios passed; invariants {totals}; "
+          f"report -> {args.output}, {json_path}")
     return 0 if passed == len(results) and not any(totals.values()) else 1
 
 

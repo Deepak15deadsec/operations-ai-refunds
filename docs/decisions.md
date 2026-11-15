@@ -23,6 +23,9 @@ Implementation choices where the spec left room, and where it was deliberately c
 | D17 | **Host ports configurable** (`WEB_PORT`, `API_PORT`, `KEYCLOAK_PORT`, `POSTGRES_PORT`) with the spec's defaults | Machines often already use 3000/8000/8080/5432 |
 | D18 | **No ESLint in the frontend build**; `tsc --noEmit` is the frontend check | Next 16 removed `next lint`; type checking catches the important issues |
 | D19 | **Tests reuse one PostgreSQL** and reseed per test with a fixed clock | Constraints, triggers, `SKIP LOCKED` and the checkpointer must be tested on real Postgres |
+| D20 | **Agent analytics are aggregated on read** from `agent_runs.usage` + `tool_completed`/`tool_failed` events, not a separate metrics store | The telemetry is already persisted; a tenant-scoped aggregation query avoids a second system. `GET /api/v1/analytics` uses real wall-clock time (consistent with `created_at = func.now()`), not the injectable domain clock |
+| D21 | **Analytics count agent-attributable effects only** (refunds with a non-null `action_id`) and investigation-bearing runs (`mode='ticket'`) | Seed fixtures and batch *parent* runs would otherwise distort the agent's measured cost/outcomes |
+| D22 | **The evaluation report is also emitted as JSON** (`docs/evaluation-report.json`) and served read-only by `GET /api/v1/eval-report` (docs mounted into the api container) | Lets the in-app dashboard show the same measured results as `make eval`, without a build step reaching the browser. Illustrative token prices live in `services/analytics.py` and are clearly labelled estimates |
 
 ## Verified package versions (2026-10-30)
 
