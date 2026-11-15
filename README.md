@@ -21,10 +21,13 @@ idempotent executor applies the change **exactly once**.
 | Safety boundaries | Policy engine recomputes eligibility and the exact amount, so the LLM's numbers are never trusted. Each approval is bound to the action's SHA-256 fingerprint. Payloads are immutable (DB trigger). Unique constraints prevent double refunds. The audit log is append-only (DB trigger) |
 | Backend | FastAPI + Pydantic v2, SQLAlchemy 2 + Alembic, PostgreSQL job queue with leases and `FOR UPDATE SKIP LOCKED`, SSE with `Last-Event-ID` replay via `LISTEN/NOTIFY` |
 | Auth | Keycloak OIDC. The API verifies issuer, audience, signature and expiry; tenant and roles come only from the verified token |
-| Frontend | Next.js 16 + Tailwind with a backend-for-frontend session (tokens never reach the browser). Pages: live timeline, approval cards, ledger and audit |
-| Quality | 89 automated tests, a 37-scenario evaluation with measured results, a Playwright E2E test, and CI |
+| Frontend | Next.js 16 + Tailwind with a backend-for-frontend session (tokens never reach the browser). Pages: live timeline, approval cards, ledger, audit and an agent-analytics dashboard |
+| Observability | An **Agent analytics** page surfaces measured telemetry the pipeline records — run outcomes, latency p50/p95, token spend and estimated cost, per-tool reliability, model comparison, 14-day activity — plus the evaluation suite's results (pass rate, safety invariants, per-category scores) served from the `make eval` artifact |
+| Quality | 95 automated tests, a 37-scenario evaluation with measured results, Playwright E2E tests, and CI |
 
 ![Run timeline](docs/images/run.png)
+
+![Agent analytics](docs/images/analytics.png)
 
 ## Quick start
 

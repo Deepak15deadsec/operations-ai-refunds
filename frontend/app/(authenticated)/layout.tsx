@@ -17,6 +17,7 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
     { href: "/tickets", label: "Tickets", icon: "ticket" },
     { href: "/agent", label: "Agent console", icon: "sparkle" },
     { href: "/runs", label: "Runs", icon: "runs" },
+    { href: "/analytics", label: "Analytics", icon: "chart" },
     ...(hasRole(identity, "supervisor") ? [{ href: "/approvals", label: "Approvals", icon: "shield", badge: "approvals" } as NavLink] : []),
     { href: "/ledger", label: "Mock ledger", icon: "ledger" },
     ...(hasRole(identity, "admin") ? [{ href: "/audit", label: "Audit trail", icon: "audit" } as NavLink] : []),

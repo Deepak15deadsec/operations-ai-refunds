@@ -127,3 +127,72 @@ export type AuditEvent = { id: string; actor_type: string; actor_id: string; run
 export type RunEvent = { id: number; event: string; data: Record<string, unknown> & { run_id: string; created_at: string } };
 
 export type Policy = { version: string; effective_from: string; min_delay_days: number; refund_percent: number; policy_text: string };
+
+export type ToolStat = { tool: string; calls: number; errors: number; error_rate: number; p50_ms: number; p95_ms: number };
+export type ModelStat = {
+  model: string; runs: number; input_tokens: number; output_tokens: number; total_tokens: number;
+  avg_latency_ms: number; est_cost_usd: number; cost_known: boolean;
+};
+export type DailyPoint = { date: string; runs: number; completed: number; failed: number };
+
+export type Analytics = {
+  generated_at: string;
+  window_hours: number | null;
+  runs_total: number;
+  runs_active: number;
+  runs_finished: number;
+  by_status: Record<string, number>;
+  outcomes: Record<string, number>;
+  success_rate: number;
+  latency: { count: number; p50_ms: number; p95_ms: number; max_ms: number };
+  tokens_input: number;
+  tokens_output: number;
+  tokens_total: number;
+  est_cost_usd: number;
+  cost_complete: boolean;
+  tools_total_calls: number;
+  tools_total_errors: number;
+  tools_error_rate: number;
+  tools: ToolStat[];
+  models: ModelStat[];
+  refunds: number;
+  refund_total_minor: number;
+  messages: number;
+  escalations: number;
+  daily: DailyPoint[];
+};
+
+type Ratio = { passed?: number; total?: number; ok?: number };
+export type EvalReport = {
+  available: boolean;
+  message?: string | null;
+  data?: {
+    generated_at: string;
+    model_label: string;
+    fixture_version: string;
+    wall_seconds: number;
+    scenarios_total: number;
+    scenarios_passed: number;
+    metrics: {
+      task_completion: Ratio;
+      investigation_correctness: Ratio;
+      tool_validity: Ratio;
+      cross_tenant_leaks: number;
+      executable_precision: Ratio;
+      adversarial_contained: Ratio;
+      policy_violations: number;
+      unapproved_writes: number;
+      duplicate_writes: number;
+      recovery: Ratio;
+      latency_investigation_ms: { p50: number; p95: number };
+      latency_execution_ms: { p50: number; p95: number };
+      tokens: number;
+    };
+    categories: Record<string, { total: number; passed: number }>;
+    scenarios: {
+      id: string; title: string; category: string; status: string; passed: boolean;
+      valid: string[]; invalid: string[]; blocked: string[]; refunds: number; messages: number;
+      failed_checks: string[];
+    }[];
+  } | null;
+};

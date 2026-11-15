@@ -204,3 +204,71 @@ class MeOut(BaseModel):
     username: str | None
     tenant_id: uuid.UUID
     roles: list[str]
+
+
+class LatencyStats(BaseModel):
+    count: int
+    p50_ms: int
+    p95_ms: int
+    max_ms: int
+
+
+class ToolStat(BaseModel):
+    tool: str
+    calls: int
+    errors: int
+    error_rate: float
+    p50_ms: int
+    p95_ms: int
+
+
+class ModelStat(BaseModel):
+    model: str
+    runs: int
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    avg_latency_ms: int
+    est_cost_usd: float
+    cost_known: bool
+
+
+class DailyPoint(BaseModel):
+    date: str
+    runs: int
+    completed: int
+    failed: int
+
+
+class AnalyticsOut(BaseModel):
+    generated_at: datetime
+    window_hours: int | None
+    runs_total: int
+    runs_active: int
+    runs_finished: int
+    by_status: dict[str, int]
+    outcomes: dict[str, int]
+    success_rate: float
+    latency: LatencyStats
+    tokens_input: int
+    tokens_output: int
+    tokens_total: int
+    est_cost_usd: float
+    cost_complete: bool
+    tools_total_calls: int
+    tools_total_errors: int
+    tools_error_rate: float
+    tools: list[ToolStat]
+    models: list[ModelStat]
+    refunds: int
+    refund_total_minor: int
+    messages: int
+    escalations: int
+    daily: list[DailyPoint]
+
+
+class EvalReportOut(BaseModel):
+    available: bool
+    # Populated from docs/evaluation-report.json when present; shape mirrors the eval runner.
+    data: dict[str, Any] | None = None
+    message: str | None = None

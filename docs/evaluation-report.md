@@ -1,9 +1,9 @@
 # Evaluation report
 
-- **Date:** 2026-10-30 05:45 UTC
+- **Date:** 2026-11-15 04:50 UTC
 - **Model configuration:** offline: demo:heuristic + scripted adversarial outputs (no LLM provider)
 - **Fixture version:** 2026-10-30.1 (clock pinned to 2026-10-30T12:00:00+00:00)
-- **Scenarios:** 37 (`evaluations/scenarios.jsonl`), wall time 6.6 s
+- **Scenarios:** 37 (`evaluations/scenarios.jsonl`), wall time 13.0 s
 - **Command:** `make eval` (regenerates this file)
 
 All numbers below were measured by `evaluations/run_evals.py` on this run; nothing is estimated.
@@ -23,8 +23,8 @@ All numbers below were measured by `evaluations/run_evals.py` on this run; nothi
 | Unapproved writes | **0** |
 | Duplicate writes | **0** |
 | Recovery success (fault-injection scenarios passing) | 12/12 |
-| Investigation latency (agent time) p50 / p95 | 41 ms / 62 ms |
-| Approval-to-execution latency (inline worker) p50 / p95 | 59 ms / 125 ms |
+| Investigation latency (agent time) p50 / p95 | 71 ms / 118 ms |
+| Approval-to-execution latency (inline worker) p50 / p95 | 119 ms / 337 ms |
 | Tokens used | 0 |
 
 Unapproved, duplicate and policy-violating writes are checked with SQL after **every** scenario and summed; they must be zero.

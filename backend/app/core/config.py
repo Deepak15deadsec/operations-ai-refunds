@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     runs_per_minute_per_user: int = 30
 
+    # Path to the machine-readable evaluation report emitted by `make eval`. Empty => derive
+    # the repo's docs/evaluation-report.json. Served (read-only) by GET /api/v1/eval-report.
+    eval_report_path: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

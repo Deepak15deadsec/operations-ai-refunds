@@ -1,7 +1,9 @@
-"""Ticket, order, policy, ledger, audit and overview endpoints (all tenant-scoped reads)."""
+"""Ticket, order, policy, ledger, audit, overview and analytics endpoints (tenant-scoped reads)."""
 
+import json
 import uuid
 from datetime import timedelta
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -9,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_admin, require_operator
 from app.core.clock import now_utc
+from app.core.config import get_settings
 from app.db.models import (
     AgentRun,
     ApprovalRequest,
@@ -21,8 +24,10 @@ from app.db.models import (
 )
 from app.db.session import get_db
 from app.schemas.api import (
+    AnalyticsOut,
     AuditEventOut,
     DeliveryEventOut,
+    EvalReportOut,
     MeOut,
     MessageOut,
     OrderDetailOut,
@@ -33,9 +38,17 @@ from app.schemas.api import (
     TicketDetailOut,
     TicketOut,
 )
-from app.services import read_service
+from app.services import analytics, read_service
 
 router = APIRouter(prefix="/api/v1")
+
+
+def _eval_report_path() -> Path:
+    configured = get_settings().eval_report_path
+    if configured:
+        return Path(configured)
+    # backend/app/api/reads.py -> repo root is parents[3]
+    return Path(__file__).resolve().parents[3] / "docs" / "evaluation-report.json"
 
 
 @router.get("/me", response_model=MeOut)
@@ -62,6 +75,28 @@ def overview(principal: Principal = Depends(require_operator), db: Session = Dep
         simulated_refund_total_minor=count(select(func.coalesce(func.sum(Refund.amount_minor), 0)).where(
             Refund.tenant_id == t)),
     )
+
+
+@router.get("/analytics", response_model=AnalyticsOut)
+def analytics_dashboard(
+    principal: Principal = Depends(require_operator),
+    db: Session = Depends(get_db),
+    window_hours: int | None = Query(default=None, ge=1, le=8760),
+):
+    """Measured agent telemetry for the tenant: outcomes, latency, cost, tool reliability."""
+    return analytics.agent_analytics(db, principal.tenant_id, window_hours=window_hours)
+
+
+@router.get("/eval-report", response_model=EvalReportOut)
+def eval_report(principal: Principal = Depends(require_operator)):
+    """Latest evaluation results from `make eval` (a build artifact, same for the whole system)."""
+    path = _eval_report_path()
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return EvalReportOut(available=False,
+                             message="No evaluation report found. Run `make eval` to generate one.")
+    return EvalReportOut(available=True, data=data)
 
 
 @router.get("/tickets", response_model=Page[TicketOut])
